@@ -1,0 +1,257 @@
+#!/bin/bash
+
+#                                              w
+#               w | |    .  |         w | | (| | ||           |   |
+#   __D__|__|>  __| |  |__| |__D__|>  __| |  |_|_||  __D__|_|_|___|
+#  |   ..      |                     |              |           .
+#
+#    Begin, in the name of Allah, the Merciful, the Compassionate
+
+# Macontrol: A program to control MAC-IP combination
+
+# Author: Noor Manseel Mohamed (manseel@rainbowlive.in)
+
+# Copyright (C) 2011 Rainbow Live Technologies, Kochi
+#                    Manath Building,
+#                    N.G.O Quarters Junction,
+#                    Kakkanad, Kochi-21,
+#                    Kerala, India.
+#                    Ph: +91 9037945689
+#                    Email: sales@rainbowlive.in
+
+# This program can be used and distributed under GPLv3 or higher
+
+# The script is expected to work only on custom installation from
+# Rainbow Live Technologies.
+
+
+# ******************************************************* *
+#               Variable Declarations
+
+SROOT=/nh/maciplist     # The program's root directory, where all
+                	# important links and files are present
+
+TEMPDIR=/tmp
+BACKTITLE="Rainbow Live Nighthawk v7.0_icet"
+TITLE="Rainbow Live Nighthawk v7.0_icet"
+
+#* The list of Allowed MAC addresses in the proxy server
+PROXYAF=/nh/maciplist/allow.mac
+FULLIST=/nh/maciplist/fulldb.list
+MACIP=/nh/maciplist/macip.db
+
+
+# ******************************************************* *
+#                      EDIT THE FILE
+
+# A function to edit the list of mac-ip combination
+
+function _edit_mip()
+
+{
+
+local FNAME=$1
+local MNAME=$2
+
+nano $FNAME
+
+}
+	
+
+# ******************************************************* *
+#                       SYNC LIST
+
+_sync_list()
+{
+
+# Take a backup of the original list
+cp $PROXYAF $PROXYAF.bak
+
+cat /dev/null > $FULLIST
+
+#* Change to $9 in Debian
+ls -l $SROOT/mainlist/*.mip|awk '{print $9}' > $TEMPDIR/flist1
+
+cat $TEMPDIR/flist1|while read line
+do
+	cat $line >> $FULLIST
+done
+
+grep -v "^#" $FULLIST|sed '/^$/d' > $FULLIST.temp
+cp $FULLIST.temp $FULLIST.unsort
+sort $FULLIST.unsort > $FULLIST
+
+awk '{print $1,$2}' $FULLIST > $MACIP
+awk '{print $1}' $FULLIST > $PROXYAF
+
+_check_validity
+
+echo -e "Restarting proxy\n"
+sleep 1
+
+/usr/sbin/squid3 -k reconfigure
+
+retval=$?
+
+if [ "$retval" -ne 0 ];then
+	echo -e "Error in new values ! Returning to older list\n"
+	sleep 3
+
+	cp $PROXYAF.bak $PROXYAF
+	/usr/sbin/squid3 -k restart
+	
+fi
+exit
+}
+
+
+# ******************************************************* *
+#                       CHECK VALIDITY
+
+_check_validity() {
+cat $PROXYAF|while read line
+do
+	if _valid_mac $line; then
+		echo -e "Valid mac $MAC_ID" > /dev/null
+	else
+	dialog --title "Invalid mac present" --clear "$@" \
+		--msgbox "Invalid mac $line . Please correct the
+			error first"	10 41
+	fi
+done
+}
+
+
+# ******************************************************* *
+#                       VALID MAC
+
+_valid_mac() {
+
+local TO_CHECK_MAC=$1
+
+echo -e $TO_CHECK_MAC|sed -n \
+"/^\([0-9A-Fa-f][0-9A-Fa-f]:\)\{5\}[0-9A-Fa-f][0-9A-Fa-f]$/p" > $TEMPDIR/mac.check
+
+if [ ! -s $TEMPDIR/mac.check ]; then
+        return 1
+else
+        return 0
+fi
+
+}
+
+
+# ******************************************************* *
+#                       THE MAIN MENU
+
+
+_menu () {
+
+
+MENU1="No Authentication Users"
+MENU2="Staff - Category I"
+MENU3="Staff - Category II"
+MENU4="Students - I Year"
+MENU5="Students - II Year"
+MENU6="Students - III Year"
+MENU7="Students - IV Year"
+MENU8="Guests"
+MENU9="Save and Exit"
+
+FILE1="/nh/maciplist/mainlist/noauth.mac"
+#FILE1="/nh/maciplist/proxy/noauth.mac"
+
+FILE2="/nh/maciplist/mainlist/staff_1.mip"
+FILE3="/nh/maciplist/mainlist/staff_2.mip"
+FILE4="/nh/maciplist/mainlist/year_1.mip"
+FILE5="/nh/maciplist/mainlist/year_2.mip"
+FILE6="/nh/maciplist/mainlist/year_3.mip"
+FILE7="/nh/maciplist/mainlist/year_4.mip"
+FILE8="/nh/maciplist/mainlist/guest.mip"
+
+
+dialog --clear --title "Rainbow Live Nighthawk Control Panel"\
+ --backtitle "$BACKTITLE" \
+ --menu "Please choose an option" 16 49 18\
+ 1 "$MENU1"\
+ 2 "$MENU2"\
+ 3 "$MENU3"\
+ 4 "$MENU4"\
+ 5 "$MENU5"\
+ 6 "$MENU6"\
+ 7 "$MENU7"\
+ 8 "$MENU8"\
+ 9 "$MENU9" 2> $TEMPDIR/_input.txt;
+
+retval=$?;
+
+if [ $retval -eq 0 ];then
+
+	case `cat $TEMPDIR/_input.txt` in
+
+		1)
+		_edit_mip "$FILE1" "$MENU1"
+		_menu
+		;;
+
+		
+		2)
+		_edit_mip "$FILE2" "$MENU2"
+		_menu
+		;;
+
+		3)
+		_edit_mip "$FILE3" "$MENU3"
+		_menu
+		;;
+
+
+		4)
+		_edit_mip "$FILE4" "$MENU4"
+		_menu
+		;;
+
+		5)
+		_edit_mip "$FILE5" "$MENU5"
+		_menu
+		;;
+
+
+		6)
+		_edit_mip "$FILE6" "$MENU6"
+		_menu
+		;;
+
+
+		7)
+		_edit_mip "$FILE7" "$MENU7"
+		_menu
+		;;
+
+
+		8)
+		_edit_mip "$FILE8" "$MENU8"
+		_menu
+		;;
+
+		9)
+		_sync_list
+		exit
+		;;		
+
+		*)
+		echo -e "still working\n"
+		sleep 5
+		;;
+
+	esac
+else
+	exit
+fi
+
+}
+
+
+_menu
+
+
