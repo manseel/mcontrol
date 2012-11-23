@@ -1,0 +1,145 @@
+#!/bin/bash
+
+#                                              w
+#               w | |    .  |         w | | (| | ||           |   |
+#   __D__|__|>  __| |  |__| |__D__|>  __| |  |_|_||  __D__|_|_|___|
+#  |   ..      |                     |              |           .
+#
+#    Begin, in the name of Allah, the Merciful, the Compassionate
+
+# bwcontrol: A program to control bandwidth in Nighthawk Install
+
+# Author: Noor Manseel Mohamed (manseel@rainbowlive.in)
+
+# Copyright (C) 2011 Rainbow Live Technologies, Kochi
+#                    Manath Building,
+#                    N.G.O Quarters Junction,
+#                    Kakkanad, Kochi-21,
+#                    Kerala, India.
+#                    Ph: +91 9037945689
+#                    Email: sales@rainbowlive.in
+
+# This program can be used and distributed under GPLv3 or higher
+
+# The script is expected to work only on custom installation from
+# Rainbow Live Technologies.
+
+# **************** Assigning global variables***************** #
+
+DIALOG_TITLE="Bandwidth Controller, Rainbow Live Nighthawk"
+
+DIALOG_BACKTITLE="Rainbow Live Nighthawk"
+
+# Temporary Directory
+TEMPDIR="/tmp"
+
+BWMASTER=/nh/bwcontrol/bwmaster/bwmaster
+#BWMASTER=/home/mansi/bwmaster/bwmaster
+
+BWCONF_TEMPLATE=/nh/bwcontrol/bwmaster/bwconf_template
+#BWCONF_TEMPLATE=/home/mansi/bwmaster/bwconf_template
+
+BWCONF=/nh/bwcontrol/bwmaster/bwconf
+
+ACLCONF=/nh/bwcontrol/bwmaster/aclconf
+
+PROXYCONF=/nh/bwcontrol/bwmaster/squid.conf
+
+cat /dev/null > $BWCONF
+
+cat /dev/null > $ACLCONF
+
+# Take a backup of the original conf
+cp /etc/squid3/squid.conf $TEMPDIR/squid.conf
+
+_create_config() {
+
+# Take a copy of the conf file, to be manipulated
+cp $BWMASTER $TEMPDIR/bwmaster.temp1
+
+
+# Cut lines below the mark
+grep -A 30 ^"\*\*\*" $TEMPDIR/bwmaster.temp1|grep -v "\*"| \
+sed '/^$/d' > $TEMPDIR/bwmaster.temp2
+
+# Adding the line "delay pools x"
+LINE_COUNT=`wc $TEMPDIR/bwmaster.temp2|awk '{print $1}'`
+CHAR_COUNT=`wc $TEMPDIR/bwmaster.temp2|awk '{print $2}'`
+NET_COUNT=$(( $CHAR_COUNT - $LINE_COUNT ))
+
+LOOP_COUNT=1
+
+cat $TEMPDIR/bwmaster.temp2|while read line
+do
+	BW="`echo $line|awk '{print $2}'`"
+	NET_RANGE="`echo $line|awk '{print $1}'`"
+	NET_IP="`echo $line|awk '{print $3}'`"
+	
+	F1=$(( $BW * 1024 ))
+	F2=$(( $BW * 2048 ))
+	
+	BANDWIDTH="$F1\/$F2"
+
+	echo -e "bandwidth = $BANDWIDTH"	
+	sleep 1
+
+	echo -e "acl $NET_RANGE src $NET_IP" >> $ACLCONF
+
+	sed -e 's/COUNT/'$LOOP_COUNT'/g;s/NETRANGE/'$NET_RANGE'/g;'\
+'s/BWIDTH/'$BANDWIDTH'/g' $BWCONF_TEMPLATE >> $BWCONF
+	echo -e " " >> $BWCONF
+	
+	let LOOP_COUNT+=1
+done
+
+cp $PROXYCONF.orig $PROXYCONF
+echo -e " " >> $PROXYCONF
+
+if [ $LINE_COUNT -gt 0 ]; then
+cat $ACLCONF >> $PROXYCONF
+echo -e " " >> $PROXYCONF
+echo -e "delay_pools $LINE_COUNT\n" >> $PROXYCONF
+fi
+
+cat $BWCONF >> $PROXYCONF
+
+cp $PROXYCONF /etc/squid3
+
+service squid3 reload
+
+retval=$?
+
+if [ $retval -ne 0 ]; then
+
+echo -e "Error: Reverting back to the previous conf"
+sleep 3
+
+cp $TEMPDIR/squid.conf /etc/squid3/squid.conf
+
+service squid3 reload
+fi
+
+}
+
+
+# ********************** MISC Operations ********************* #
+
+# Take a backup of the bwmaster file
+cp $BWMASTER $BWMASTER.bak
+
+dialog 	--title "$DIALOG_TITLE" \
+	--fixed-font --clear \
+	--editbox $BWMASTER 0 0 2> $TEMPDIR/bwmaster
+
+retval=$?
+
+if [ "$retval" -ne 0 ];then
+	echo -e "not fine"
+	exit
+else
+	echo -e "fine"
+	cp $TEMPDIR/bwmaster $BWMASTER
+	_create_config
+	sleep 2
+fi
+

@@ -1,0 +1,99 @@
+
+#                                              w
+#               w | |    .  |         w | | (| | ||           |   |
+#   __D__|__|>  __| |  |__| |__D__|>  __| |  |_|_||  __D__|_|_|___|
+#  |   ..      |                     |              |           .
+#
+#    Begin, in the name of Allah, the Merciful, the Compassionate
+
+
+
+# Author: Noor Manseel Mohamed (manseel@rainbowlive.in)
+
+# Copyright (C) 2012 Rainbow Live Technologies, Kochi
+#                    Manath Building,
+#                    N.G.O Quarters Junction,
+#                    Kakkanad, Kochi-21,
+#                    Kerala, India.
+#                    Ph: +91 9037945689
+#                    Email: sales@rainbowlive.in
+
+# Can be used under GPLv3 or higher
+
+# ucontrol.sh
+
+# A program to monitor network activities
+
+# Date of addition to Marian Server: 06-March-2012
+
+# Date of last modification: 06-March-2012
+
+
+#***************** Assigning global variables***************** #
+
+BACKTITLE="Rainbow Live Nighthawk"
+
+# Temporary Directory
+TEMPDIR="/tmp"
+
+
+#**********************_menu*************************# 
+
+# The main menu function
+
+_menu() {
+
+# Dialog title
+MENU_TITLE="Network Monitor: Rainbow Live Nighthawk"
+
+# Menu entries
+MENU1="Bandwidth Monitor"
+MENU2="Iptraffic"
+MENU3="Interface Traffic"
+MENU_EXIT="Exit"
+
+dialog 	--clear --title "$MENU_TITLE" \
+	--backtitle "$BACKTITLE" \
+	--menu "Please choose an option" 11 40 6 \
+	1 "$MENU1" \
+	2 "$MENU2" \
+	3 "$MENU3" \
+	4 "$MENU_EXIT" \
+		2> $TEMPDIR/_menu_input_nm.txt;
+
+retval=$?
+
+if [ "$retval" -eq 0 ];then
+
+	case `cat $TEMPDIR/_menu_input_nm.txt` in
+	
+		1)
+		bmon
+		_menu
+		;;
+
+		2)
+		iptraf
+		_menu
+		;;
+		
+		3)
+		iftop -i lan
+		_menu
+		;;
+
+		4)
+	        exit
+		;;
+
+		*)
+		_menu
+		;;
+	esac
+else
+	
+        exit
+fi
+}	
+
+_menu

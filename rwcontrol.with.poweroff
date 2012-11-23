@@ -1,0 +1,568 @@
+#!/bin/bash
+
+#                                              w
+#               w | |    .  |         w | | (| | ||           |   |
+#   __D__|__|>  __| |  |__| |__D__|>  __| |  |_|_||  __D__|_|_|___|
+#  |   ..      |                     |              |           .
+#
+#    Begin, in the name of Allah, the Merciful, the Compassionate
+
+
+# Krystal3: A (not so) primitive control Panel for Nighthawk version 5.x Polar
+
+# Author: Noor Manseel Mohamed (manseel@rainbowlive.in)
+
+# Copyright (C) 2011 Rainbow Live Technologies, Kochi
+#                    Manath Building,
+#                    N.G.O Quarters Junction,
+#                    Kakkanad, Kochi-21,
+#                    Kerala, India.
+#                    Ph: +91 9037945689
+#                    Email: sales@rainbowlive.in
+
+# Date of begin: 04-April-2011
+# Last Modified: 30-June-2011
+
+# Version Number: 0.2.0
+
+# Updates from the pervious version 0.1.
+
+# Major revision in the Allowed Websites and Denied Websites
+# Now the websites can be allowed and denied by directly editing
+# the text files, containing list of the websites
+
+# This program can be used and distributed under GPLv3 or higher
+
+# The script is expected to work only on custom installation from
+# Rainbow Live Technologies.
+
+# Initializing the Control Panel variables
+# The krystal root directory
+
+# ******************************************************* *
+#		Variable Declarations
+
+SROOT=/nh	# The program's root directory, where all
+		# important links and files are present
+
+
+DGROOT=/usr/local/etc/redwolf/lists 	# The directory where the RW
+DGLOG=/usr/local/var/log/redwolf
+					# config files reside
+
+BACKTITLE="Rainbow Live Nighthawk v5.0"
+TITLE="Rainbow Live Nighthawk v5.0"
+
+
+# ******************************************************* *
+# 		WELCOME MESSAGE
+
+
+#dialog  --infobox " Welcome to Rainbow Live Nighthawk v5.0 !" 3 44
+#sleep 1
+
+
+# ******************************************************* *
+# 		BLOCK/UNBLOCK SUB-MENU
+
+
+# A function to view and block/unblock websites
+
+_web_control() {
+dialog  --clear --title "$TITLE" \
+        --backtitle "$BACKTITLE" \
+        --menu "Please choose an option" 13 43 18 \
+        1 "Banned Websites" \
+        2 "Allowed Websites" \
+        3 "Exit" 2> $SROOT/_input.txt;
+
+retval=$?;
+
+if [ $retval -eq 0 ]; then
+
+case `cat $SROOT/_input.txt` in
+
+
+1)
+
+_banned_sites
+_web_control
+;;
+
+2)
+
+_allowed_sites
+_web_control
+;;
+
+
+*)
+
+_menu
+;;
+
+esac
+fi
+
+_menu
+
+}
+
+# ******************************************************* *
+#		      ALLOWED WEBSITES
+
+_allowed_sites() {
+
+# Take a backup of the exception sites
+cp $SROOT/exceptionsite $SROOT/exceptionsite.orig
+
+# Open the list of exception sites
+dialog 	--title "Unrestricted Websites" \
+	--fixed-font --clear \
+	--editbox $SROOT/exceptionsite 0 0 2> $SROOT/exceptiontemp
+
+retval=$?
+
+if [ "$retval" -ne 0 ]; then
+	_web_control
+fi
+
+cp $SROOT/exceptiontemp $SROOT/exceptionsite
+
+cat $SROOT/exceptionsite|while read site
+do
+	grep -q $site $SROOT/bannedsite
+	retval=$?
+
+	if [ $retval -eq 0 ]; then
+		grep -v $site $SROOT/bannedsite > $SROOT/bannedsite.bak
+		cp $SROOT/bannedsite.bak $SROOT/bannedsite
+	fi
+done
+
+# Restart redwolf
+redwolf -Q
+
+# Check for any fatal errors in editing. Restore the original in
+# such a case
+
+retval=$?
+
+if [ $retval -ne 0 ]; then
+	cp $SROOT/exceptionsite.orig $SROOT/exceptionsite
+	redwolf -Q
+fi
+
+
+
+}
+
+# ******************************************************* *
+#		      BANNED WEBSITES
+
+
+_banned_sites() {
+
+# Take a backup of the exception sites
+cp $SROOT/bannedsite $SROOT/bannedsite.orig
+
+# Open the list of exception sites
+dialog 	--title "Banned Websites" \
+	--fixed-font --clear \
+	--editbox $SROOT/bannedsite 0 0 2> $SROOT/bannedtemp
+
+retval=$?
+
+if [ "$retval" -ne 0 ]; then
+	_web_control
+fi
+
+cp $SROOT/bannedtemp $SROOT/bannedsite
+
+cat $SROOT/bannedsite|while read site
+do
+	grep -q $site $SROOT/exceptionsite
+	retval=$?
+
+	if [ $retval -eq 0 ]; then
+		grep -v $site $SROOT/exceptionsite > $SROOT/exceptionsite.bak
+		cp $SROOT/exceptionsite.bak $SROOT/exceptionsite
+	fi
+done
+
+# Restart redwolf
+redwolf -Q
+
+# Check for any fatal errors while editing. Restore the original in
+# such a case
+
+retval=$?
+
+if [ $retval -ne 0 ]; then
+	cp $SROOT/bannedsite.orig $SROOT/bannedsite
+	redwolf -Q
+fi
+
+
+}
+
+# ******************************************************* *
+#	ALLOWED MAC ADDRESSES
+
+
+# List of MAC adresses allowed to connect to the proxy
+# server
+_allowed_mac() {
+
+MACTITLE="Denied MAC Addresses"
+
+cp $SROOT/maclist $SROOT/maclist.bak
+
+dialog 	--title "$MACTITLE" \
+	--fixed-font --clear \
+	--editbox $SROOT/maclist 0 0 2> $SROOT/maclist.temp
+
+retval=$?
+
+# If "cancel" is pressed, escape to the main menu
+if [ "$retval" -eq 1 ]; then
+_menu
+fi
+
+cp $SROOT/maclist.temp $SROOT/maclist
+
+/etc/init.d/squid3 reload
+if [ "$?" ne 0 ]; then
+echo -e "There is some typing errors in the input! Reverting \
+to the previous list"
+sleep 2
+
+# Restoring the original list
+cp $SROOT/maclist.bak $SROOT/maclist
+/etc/init.d/squid3 reload
+fi
+
+}
+
+# ******************************************************* *
+#		UNRESTRICTED IPS
+
+
+_unrestricted_ips() {
+
+# Take a backup of existing unresricted IP list
+cp $DGROOT/exceptioniplist $SROOT/exceptionip.orig
+
+# Take a backup of the existing banned IP list
+cp $DGROOT/bannediplist $SROOT/bannedip.orig
+
+dialog 	--title "Unrestricted IPs" \
+	--fixed-font --clear \
+	--editbox $DGROOT/exceptioniplist 0 0 2> $SROOT/exceptionip.temp
+
+retval=$?
+
+# If "cancel" button is pressed, escape to the main menu
+if [ "$retval" -ne 0 ]; then
+	_menu
+fi
+
+cp $SROOT/exceptionip.temp $DGROOT/exceptioniplist
+
+cat $DGROOT/exceptioniplist|while read ip
+do
+        grep -q $ip $DGROOT/bannediplist
+        retval=$?
+
+        if [ $retval -eq 0 ]; then
+                grep -v $ip $DGROOT/bannediplist > $SROOT/bannedip.temp
+                cp $SROOT/bannedip.temp $DGROOT/bannediplist
+        fi
+done
+
+#Restart redwolf
+redwolf -Q
+
+retval=$?
+
+if [ $retval -ne 0 ];then
+
+        cp $SROOT/exceptionip.orig $DGROOT/exceptioniplist
+        redwolf -Q
+
+        retval=$?
+
+        if [ $retval -ne 0 ];then
+        	cp $SROOT/bannedip.orig $DGROOT/bannediplist
+                redwolf -Q
+
+                retval=$?
+
+                if [ $retval -ne 0 ]; then
+                        echo -e "\nFatal error in Restaring Redwolf\n"
+                fi
+        fi
+fi
+
+}
+
+
+# ******************************************************* *
+#			BANNED IPS
+
+_banned_ips() {
+
+# Take a backup of the existing banned IP list
+cp $DGROOT/bannediplist $SROOT/bannedip.orig
+
+# Take a backup of the existing Unrestricted IP list
+cp $DGROOT/exceptioniplist $SROOT/exceptionip.orig
+
+dialog	--title "Banned IP Addresses" \
+	--fixed-font --clear \
+	--editbox $DGROOT/bannediplist 0 0 2> $SROOT/bannedip.temp
+
+retval=$?
+
+# If "cancel" button is pressed, escape to the main menu
+if [ "$retval" -ne 0 ]; then
+	_menu
+fi
+
+cp $SROOT/bannedip.temp $DGROOT/bannediplist
+
+cat $DGROOT/bannediplist|while read ip
+do
+	grep -q $ip $DGROOT/exceptioniplist
+	retval=$?
+
+	if [ $retval -eq 0 ]; then
+		grep -v $ip $DGROOT/exceptioniplist > $SROOT/exceptionip.temp
+		cp $SROOT/exceptionip.temp $DGROOT/exceptioniplist
+	fi
+done
+
+#Restart redwolf
+redwolf -Q
+
+# Check for any fatal errors while editing. Restore the original files
+# in such a case
+
+retval=$?
+
+if [ $retval -ne 0 ];then
+
+	cp $SROOT/bannedip.orig $DGROOT/bannediplist
+	redwolf -Q
+	
+	retval=$?
+	
+	if [ $retval -ne 0 ];then
+		cp $SROOT/exceptionip.orig $DGROOT/exceptioniplist
+		redwolf -Q
+
+		retval=$?
+		
+		if [ $retval -ne 0 ]; then
+			echo -e "\nFatal error in Restaring Redwolf\n"
+		fi
+	fi
+fi
+
+
+}		
+
+
+# ******************************************************* *
+#			LIVE TRAFFIC
+
+_live_traffic() {
+dialog --tailbox $DGLOG/access.log 0 0; #30 130;
+}
+
+# ******************************************************* *
+#		HISTORY OF AN IP
+
+
+# View the browsing history of an IP
+
+_ip_history() {
+
+dialog  --title "View History of an IP" \
+        --backtitle "$BACKTITLE" \
+        --inputbox "Please enter the IP Address" 15 55 2> $SROOT/ip_tempp;
+retval=$?
+
+case $retval in
+
+        0)
+
+        grep `cat $SROOT/ip_tempp` $DGLOG/access.log\
+|awk '{print $1,$2,$5}'\
+|sed 's/.com*.*/.com/;s/.net*.*/.net/;s/.org*.*/.org/;s/.co.in*.*/.co.in/'\
+|uniq > $SROOT/ip_hist;
+
+        dialog --clear --title "IP History" --textbox "$SROOT/ip_hist" 0 0;;
+
+        *)
+        exit;;
+esac
+
+}
+
+
+
+# ******************************************************* *
+#		CUSTOMER SUPPORT
+
+_get_support() {
+
+dialog  --clear --title "Get Support" \
+        --msgbox "Please email to support@rainbowlive.in for support \
+or call +91 9037945689 for emergency response." 10 41;
+
+}
+
+
+
+# ******************************************************* *
+#		POWEROFF/REBOOT
+
+
+_poweroff() {
+
+dialog --clear --title "Poweroff/Reboot" \
+--backtitle "$BACKTITLE" \
+--menu "Please choose an option" 10 39 18 \
+1 "Poweroff" \
+2 "Reboot" \
+3 "Exit" 2> $SROOT/_power.txt;
+
+case `cat $SROOT/_power.txt` in
+
+1) 
+dialog --clear --title "Shutdown confirmation!" \
+--backtitle "$BACKTITLE" \
+--yesno "Are you sure to shutdown the server?" \
+6 42 2> $SROOT/_shutdown.txt
+
+if [ "$?" -eq 0 ]; then
+	poweroff # turning off the system
+else 
+_poweroff
+fi
+;;
+
+2)
+dialog --clear --title "Reboot confirmation!" \
+--backtitle "$BACKTITLE" \
+--yesno "Are you sure to reboot the server?" \
+6 42 2> $SROOT/_temp.txt
+
+if [ "$?" -eq 0 ]; then
+	reboot # rebooting the system
+else
+_poweroff
+fi
+;;
+*)
+
+_menu
+;;
+
+esac
+}
+
+
+
+# ******************************************************* *
+#			THE MAIN MENU
+
+
+_menu () {
+
+
+MENU1="Block/Unblock Websites"
+MENU2="Unfiltered IP Addresses"
+MENU3="Banned IP Addresses"
+MENU4="Denied MAC Addresses"
+MENU5="Live Traffic"
+MENU6="History of an IP Address"
+MENU7="Get Support"
+MENU8="Poweroff/Reboot"
+MENU9="Exit"
+
+dialog --clear --title "Rainbow Live Nighthawk Control Panel"\
+ --backtitle "$BACKTITLE" \
+ --menu "Please choose an option" 16 49 18\
+ 1 "$MENU1"\
+ 2 "$MENU2"\
+ 3 "$MENU3"\
+ 4 "$MENU4"\
+ 5 "$MENU5"\
+ 6 "$MENU6"\
+ 7 "$MENU7"\
+ 8 "$MENU8"\
+ 9 "$MENU9" 2> $SROOT/_input.txt;
+
+retval=$?;
+
+if [ $retval -eq 0 ];then
+
+case `cat $SROOT/_input.txt` in
+
+1)
+_web_control
+_menu
+;;
+
+2)
+_unrestricted_ips
+_menu
+;;
+
+3)
+_banned_ips
+_menu
+;;
+
+4)
+_allowed_mac
+_menu
+;;
+
+5)
+_live_traffic
+_menu
+;;
+
+6)
+_ip_history;
+_menu
+;;
+
+7)
+_get_support
+_menu
+;;
+
+8)
+_poweroff
+_menu
+;;
+
+9)
+exit
+;;
+
+*)
+_menu
+;;
+
+esac
+else
+exit;
+fi
+}
+
+_menu

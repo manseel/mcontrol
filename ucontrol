@@ -1,0 +1,427 @@
+
+#                                              w
+#               w | |    .  |         w | | (| | ||           |   |
+#   __D__|__|>  __| |  |__| |__D__|>  __| |  |_|_||  __D__|_|_|___|
+#  |   ..      |                     |              |           .
+#
+#    Begin, in the name of Allah, the Merciful, the Compassionate
+
+
+
+# Author: Noor Manseel Mohamed (manseel@rainbowlive.in)
+
+# Copyright (C) 2011 Rainbow Live Technologies, Kochi
+#                    Manath Building,
+#                    N.G.O Quarters Junction,
+#                    Kakkanad, Kochi-21,
+#                    Kerala, India.
+#                    Ph: +91 9037945689
+#                    Email: sales@rainbowlive.in
+
+# Can be used under GPLv3 or higher
+
+# ucontrol.sh
+
+# A program to add/modify/delete a user for authenticated proxy
+# in Nighthawk Installation
+
+# Date of addition to Marian Server: 05-March-2012
+
+# Date of last modification: 05-March-2012
+
+
+#***************** Assigning global variables***************** #
+
+BACKTITLE="Rainbow Live Nighthawk"
+
+# Temporary Directory
+TEMPDIR="/tmp"
+
+# The file containing the web user data including name and passwords
+#* UDATAFILE="/root/udatafile"
+UDATAFILE="/nh/webusers/user_data"
+
+# The file containing the web username
+#* EXISTING_USER_LIST="/root/uexisting_users"
+EXISTING_USER_LIST="/nh/webusers/uname"
+
+# ********** Sort the master file numeric/alphabetic ********* #
+
+sort -n $UDATAFILE > $UDATAFILE.temp
+cp $UDATAFILE.temp $UDATAFILE
+
+#*********************_manual_user_add*************************# 
+
+# A function to add user one-by-one
+
+_manual_user_add() {
+
+IN_ADD_TITLE="Add a web user"
+
+# The raw input from the user
+IN_ADD_USER=$TEMPDIR/raw_in.$$
+
+# The formated input by removing leading and trailing blanks
+IN_ADD_FORMAT=$TEMPDIR/formated.$$
+
+dialog  --backtitle "$BACKTITLE" --title "$IN_ADD_TITLE" \
+        --clear --form "\nInput the user details:" 25 60 7 \
+        "User Name:"            1 1  ""  1 25 25 30 \
+        "Password:"             2 1  ""  2 25 25 30 \
+        "Name/Comments:"        3 1  ""  3 25 25 30 \
+        2> $IN_ADD_USER
+
+retval=$?
+
+cat $UDATAFILE |awk '{print $1}' > $EXISTING_USER_LIST
+
+# Exit if Cancel or Esc
+if [ "$retval" -ne 0 ]; then
+	_clear_var 
+	_menu
+fi
+
+# Remove the leading and trailing blanks from the input of the dialog
+sed 's/^[ \t]*//;s/[ \t]*$//' $IN_ADD_USER > $IN_ADD_FORMAT
+
+UNAME=$(sed -n '1p' $IN_ADD_FORMAT)
+PWORD=$(sed -n '2p' $IN_ADD_FORMAT)
+COMNT=$(sed -n '3p' $IN_ADD_FORMAT)
+
+#* Remove the echo to execute the command for real
+#echo -e "htpasswd -b /etc/squid3/userdata $UNAME $PWORD"
+htpasswd -b /etc/squid3/userdata $UNAME $PWORD
+#sleep 2
+
+retval=$?
+
+if [ "$retval" -eq 0 ]; then
+        dialog  --infobox " Successfully added/modified the user $UNAME" 3 44
+	sleep 3
+
+	grep -w "$UNAME" $EXISTING_USER_LIST
+		retval=$?
+		#echo -e "i am the retval $retval"
+		#sleep 4
+		if [ "$retval" -eq 0 ]; then
+			#echo -e "Action: Dont add to the master file"
+			#sleep 2
+		
+		 	_menu
+		else
+			echo -e "$UNAME\t\t$PWORD\t\t\t$COMNT" >> $UDATAFILE
+			#echo -e "Action: New user, add to the master file"
+			#sleep 3
+			_menu
+		fi
+else
+        dialog  --infobox " Error adding/modifying user. Please retry !" 3 50
+	sleep 3
+fi
+_menu
+}
+
+
+
+
+
+
+# ********************_manual_user_delete********************* # 
+
+# A function which gives the dialog input box
+
+_manual_user_delete() {
+
+IN_DEL_TITLE="Delete a web user"
+
+# The raw input from the user
+IN_DEL_USER=$TEMPDIR/in_del_user.$$
+
+# The formated input by removing leading and trailing blanks
+IN_DEL_FORMAT=$TEMPDIR/in_del_format.$$
+
+dialog  --backtitle "$BACKTITLE" --title "$IN_DEL_TITLE" \
+        --clear --form "\nEnter the username to be deleted " 15 60 4 \
+        "User Name:"            1 1  ""  1 25 25 30 \
+        2> $IN_DEL_USER
+
+retval=$?
+
+# Exit if Cancel or Esc
+if [ "$retval" -ne 0 ]; then
+	_clear_var
+	_menu        
+fi
+
+# Remove the leading and trailing blanks from the input of the dialog
+sed 's/^[ \t]*//;s/[ \t]*$//' $IN_DEL_USER > $IN_DEL_FORMAT
+
+UNAME=$(sed -n '1p' $IN_DEL_FORMAT)
+
+#* Remove the echo to execute the command for real
+#echo -e "htpasswd -D /etc/squid3/userdata $UNAME"
+htpasswd -D /etc/squid3/userdata $UNAME
+#sleep 2
+
+retval="$?"
+
+if [ "$retval" -eq 0 ]; then
+        dialog  --infobox " Successfully deleted the user $UNAME" 3 44
+        sleep 3
+
+	grep -w ^"$UNAME" "$UDATAFILE"
+	retval=$?
+	if [ "$retval" -eq 0 ];then
+		grep -v -w ^"$UNAME" "$UDATAFILE" > $UDATAFILE.temp
+		cp $UDATAFILE.temp $UDATAFILE
+	fi 
+	
+
+	_clear_var
+	_menu
+else
+        dialog  --infobox " Error deleting user. Please retry !" 3 44
+        sleep 3
+
+	_clear_var
+	_menu
+fi
+
+}
+
+
+
+
+
+
+#********************_bulk_user_add*************************# 
+
+# A function to add user in bulk
+
+_bulk_user_add() {
+
+BULK_ADD_TITLE="Bulk add/modify users"
+
+# The bulk input from the user
+BULK_ADD_USER_IN=$TEMPDIR/bulk_in.$$
+
+# The edited bulk input for the dialog editbox
+BULK_ADD_USER_OUT=$TEMPDIR/bulk_out.$$
+
+# The existing users present in the User Data file
+# ie, $UDATAFILE
+
+# Create a temporary file for accepting the bulk input
+touch $BULK_ADD_USER_IN
+
+dialog  --title "$BULK_ADD_TITLE" \
+        --fixed-font --clear \
+        --editbox $BULK_ADD_USER_IN 0 0 2> $BULK_ADD_USER_OUT
+
+retval=$?
+
+if [ "$retval" -ne 0 ]; then
+	rm $BULK_ADD_USER_IN
+	rm $BULK_ADD_USER_OUT
+	_menu
+fi
+
+cat $UDATAFILE |awk '{print $1}' > $EXISTING_USER_LIST
+
+cat $BULK_ADD_USER_OUT|while read line
+do
+	BUNAME=`echo $line|awk '{print $1}'`
+	BPWORD=`echo $line|awk '{print $2}'`
+	#echo $BUNAME
+	##echo $BPWORD
+	#* 
+	# echo -e "htpasswd -b /etc/squid3/userdata $BUNAME $BPWORD"
+	htpasswd -b /etc/squid3/userdata $BUNAME $BPWORD
+	# sleep 2
+	grep -w "$BUNAME" $EXISTING_USER_LIST
+	retval=$?
+	if [ "$retval" -eq 0 ]; then
+		echo -e "Action: Dont add to the master file"
+		#sleep 3
+	else
+		echo -e "$line" >>  $UDATAFILE
+		#echo -e "Action: New user, add to the master file"
+		#sleep 3
+	fi
+
+
+done
+
+	rm $BULK_ADD_USER_IN
+	rm $BULK_ADD_USER_OUT
+}
+
+
+
+#********************_bulk_user_del*************************# 
+
+# A function to delete users in bulk
+
+_bulk_user_del() {
+
+BULK_DEL_TITLE="Bulk delete users"
+
+# The bulk input from the user
+BULK_DEL_USER_IN=$TEMPDIR/bulk_del_in.$$
+
+# The edited bulk input for the dialog editbox
+BULK_DEL_USER_OUT=$TEMPDIR/bulk_del_out.$$
+
+# The existing users present in the User Data file
+# ie, $UDATAFILE
+
+# Create the temporary file to get the input from the admin
+touch $BULK_DEL_USER_IN
+
+# Open two temporary files to read the bulk input from the
+# admin
+dialog  --title "$BULK_DEL_TITLE" \
+        --fixed-font --clear \
+        --editbox $BULK_DEL_USER_IN 0 0 2> $BULK_DEL_USER_OUT
+
+retval=$?
+
+if [ "$retval" -ne 0 ]; then
+	rm -f $BULK_DEL_USER_IN
+	rm -f $BULK_DEL_USER_OUT
+	sleep 2
+	_menu
+fi
+
+cat $UDATAFILE |awk '{print $1}' > $EXISTING_USER_LIST
+
+cat $BULK_DEL_USER_OUT|while read line
+do
+	BUNAME=`echo $line|awk '{print $1}'`
+
+#* Remove the echo to execute the command for real
+	#* 
+	#echo -e "htpasswd -D /etc/squid3/userdata $BUNAME"
+	htpasswd -D /etc/squid3/userdata $BUNAME
+	#sleep 2
+
+	grep -q -w ^"$BUNAME" "$UDATAFILE"
+	retval=$?
+	if [ "$retval" -eq 0 ];then
+		grep  -v -w ^"$BUNAME" "$UDATAFILE" > $UDATAFILE.temp
+		cp $UDATAFILE.temp $UDATAFILE
+	fi
+
+
+done
+
+	rm $BULK_DEL_USER_IN
+	rm $BULK_DEL_USER_OUT
+
+}
+
+
+
+#**********************_clear_var*************************# 
+
+# A function to clear the temporary variables
+
+_clear_var() {
+
+rm -f $IN_ADD_USER
+rm -f $IN_ADD_FORMAT
+rm -f $IN_DEL_FORMAT
+rm -f $IN_DEL_USER
+
+}
+
+
+
+
+# **********************_view_udata*************************# 
+
+# A function to view the user data
+
+_view_udata() {
+
+dialog --clear --title "test" "$@" --textbox "$UDATAFILE" 25 80
+
+}
+
+#**********************_menu*************************# 
+
+# The main menu function
+
+_menu() {
+
+# Dialog title
+MENU_TITLE="User Control: Rainbow Live Nighthawk"
+
+# Menu entries
+MENU1="Add/modify a user"
+MENU2="Delete a user"
+MENU3="Bulk add/modify users"
+MENU4="Bulk delete users"
+MENU5="View user data"
+MENU_EXIT="Exit"
+
+dialog 	--clear --title "$MENU_TITLE" \
+	--backtitle "$BACKTITLE" \
+	--menu "Please choose an option" 13 40 6 \
+	1 "$MENU1" \
+	2 "$MENU2" \
+	3 "$MENU3" \
+	4 "$MENU4" \
+	5 "$MENU5" \
+	6 "$MENU_EXIT" \
+		2> $TEMPDIR/_menu_input.txt;
+
+retval=$?
+
+if [ "$retval" -eq 0 ];then
+
+	case `cat $TEMPDIR/_menu_input.txt` in
+	
+		1)
+		_manual_user_add
+		_menu
+		;;
+
+		2)
+		_manual_user_delete
+		_menu
+		;;
+		
+		3)
+		_bulk_user_add
+		_menu
+		;;
+
+		4)
+		_bulk_user_del
+		_menu
+		;;
+
+		5)
+		_view_udata
+		_menu
+		;;
+
+		6)
+		dialog  --infobox "Quitting !" 3 17
+        	sleep 1
+	        exit
+		;;
+
+		*)
+		_menu
+		;;
+	esac
+else
+	
+	dialog --clear --infobox "Quitting !" 3 30
+        exit
+fi
+}	
+
+_menu
